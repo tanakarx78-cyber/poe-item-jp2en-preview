@@ -179,8 +179,8 @@ function translateAdvancedMetadata(inner, options = {}) {
   if (influence) {
     const label = quotedName || unquotedHeading.match(/\(\s*([^):]+)\s*\)/)?.[1]?.trim();
     const tier = {
-      "下級": "Lesser", "上級": "Greater", "大": "Grand",
-      "特大": "Exceptional", "極大": "Exquisite", "完璧": "Perfect",
+      "小": "Lesser", "大": "Greater", "特大": "Grand", "希少": "Exceptional", "格別": "Exceptional",
+      "精巧": "Exquisite", "完璧": "Perfect", "下級": "Lesser", "上級": "Greater",
       "Lesser": "Lesser", "Greater": "Greater", "Grand": "Grand",
       "Exceptional": "Exceptional", "Exquisite": "Exquisite", "Perfect": "Perfect"
     }[label] || label;
