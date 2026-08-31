@@ -133,6 +133,14 @@ function prefixedItemName(value) {
   }
 }
 
+function baseNameFromDisplayName(value) {
+  let found = "";
+  for (const base of Object.keys(dictionary.baseNames || {})) {
+    if (value.endsWith(base) && base.length > found.length) found = base;
+  }
+  return found;
+}
+
 function convertLine(line) {
   let original = line.trim().replace(/^##\s*/, "");
   if (!original) return { text: "", converted: true, kind: "empty" };
@@ -232,10 +240,14 @@ function convert(text) {
   for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
     const block = blocks[blockIndex];
     const lines = block.split("\n").map(line => line.trim().replace(/^##\s*/, "")).filter(Boolean);
-    const rarityIndex = lines.findIndex(line => /^レアリティ:\s*レア$/.test(line.replace("：", ":")));
-    if (rarityIndex >= 0) {
+    const rarityIndex = lines.findIndex(line => /^レアリティ:\s*(?:ノーマル|マジック|レア)$/.test(line.replace("：", ":")));
+    const rarity = rarityIndex >= 0 && lines[rarityIndex].replace("：", ":").split(":")[1].trim();
+    if (rarity === "レア") {
       const baseIndex = lines.findIndex((line, index) => index > rarityIndex + 1 && dictionary.exact[line]);
       if (baseIndex > rarityIndex + 1) lines[rarityIndex + 1] = "Rare Item";
+    } else if ((rarity === "ノーマル" || rarity === "マジック") && lines[rarityIndex + 1]) {
+      const base = baseNameFromDisplayName(lines[rarityIndex + 1]);
+      if (base) lines[rarityIndex + 1] = base;
     }
     const hasLaterBoundary = laterBoundary.slice(blockIndex + 1).some(Boolean);
     if (blockIndex > 0 && isKnownFlavourBlock(lines)) {
