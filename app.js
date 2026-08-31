@@ -24,7 +24,10 @@ const stateWords = new Map([
 const manualExact = new Map([
   // The client uses 確率 in this unique-mod line while the trade data uses 率.
   ["ブロック確率が幸運になる", "Chance to Block is Lucky"],
-  ["ブロック率が幸運になる", "Chance to Block is Lucky"]
+  ["ブロック率が幸運になる", "Chance to Block is Lucky"],
+  ["上品な傲慢", "Elegant Hubris"],
+  ["範囲内のパッシブは永遠の帝国に征服される", "Passives in radius are Conquered by the Eternal Empire"],
+  ["範囲内のパッシブはエターナル帝国に征服される", "Passives in radius are Conquered by the Eternal Empire"]
 ]);
 const fixed = new Map([
   ["アイテムクラス", "Item Class"], ["レアリティ", "Rarity"],
@@ -36,7 +39,9 @@ const fixed = new Map([
   ["ワード", "Ward"], ["装備要求", "Requirements"], ["レベル", "Level"],
   ["筋力", "Str"], ["器用さ", "Dex"], ["知性", "Int"], ["ソケット", "Sockets"],
   ["アイテムレベル", "Item Level"], ["個数制限", "Limited to"], ["半径", "Radius"],
+  ["コスト・リザーブ倍率", "Cost & Reservation Multiplier"], ["品質による追加の効果", "Additional Effects From Quality"],
   ["タリスマンティア", "Talisman Tier"], ["メモリーストランド", "Memory Strands"],
+  ["クラスタージュエルスキル", "Cluster Jewel Skill"], ["クラスタージュエルノード数", "Cluster Jewel Node Count"],
   ["幽体化度", "Intangibility"], ["Intangibility", "Intangibility"],
   ["コラプト状態", "Corrupted"],
   ["ミラー状態", "Mirrored"], ["未鑑定", "Unidentified"]
@@ -58,6 +63,16 @@ const characterClasses = new Map([
   ["マローダー", "Marauder"], ["レンジャー", "Ranger"], ["ウィッチ", "Witch"],
   ["デュエリスト", "Duelist"], ["テンプラー", "Templar"], ["シャドウ", "Shadow"], ["サイオン", "Scion"]
 ]);
+const gemTags = new Map([
+  ["アタック", "Attack"], ["キャスター", "Caster"], ["スペル", "Spell"], ["サポート", "Support"],
+  ["クリティカル", "Critical"], ["投射物", "Projectile"], ["範囲", "Area"], ["効果範囲", "AoE"],
+  ["近接", "Melee"], ["ストライク", "Strike"], ["スラム", "Slam"], ["持続時間", "Duration"],
+  ["ミニオン", "Minion"], ["トーテム", "Totem"], ["トラップ", "Trap"], ["マイン", "Mine"],
+  ["呪い", "Curse"], ["オーラ", "Aura"], ["物理", "Physical"], ["火", "Fire"],
+  ["冷気", "Cold"], ["雷", "Lightning"], ["混沌", "Chaos"], ["移動", "Movement"],
+  ["チャネリング", "Channelling"], ["トリガー", "Trigger"], ["ガード", "Guard"], ["ウォークライ", "Warcry"],
+  ["ブリンク", "Blink"], ["ブランド", "Brand"], ["弓", "Bow"], ["オーブ", "Orb"]
+]);
 
 function normalize(text) {
   return text.replace(/\r\n?/g, "\n").replace(/[：]/g, ":").trim();
@@ -71,9 +86,14 @@ function applyTemplate(template, match) {
 }
 
 function translateByRule(text) {
-  for (const rule of dictionary.rules || []) {
-    const match = rule.regex.exec(text);
-    if (match) return applyTemplate(rule.en, match);
+  const variants = [text];
+  const advancedRoll = text.match(/^([^()\d]+)\([^)]*[ぁ-んァ-ヶ一-龯][^)]*\)(の.+)$/);
+  if (advancedRoll) variants.push(advancedRoll[1] + advancedRoll[2]);
+  for (const variant of variants) {
+    for (const rule of dictionary.rules || []) {
+      const match = rule.regex.exec(variant);
+      if (match) return applyTemplate(rule.en, match);
+    }
   }
 }
 
@@ -181,6 +201,10 @@ function convertLine(line) {
     if (translated) return { text: `Buff grants ${translated}${tag ? ` ${tag}` : ""}`, converted: true, kind: "property" };
   }
   if (dictionary.tailExact?.[clean]) return { text: "", converted: true, omitted: true, ignored: true, kind: "tail", source: original };
+  const displayTags = clean.split(/\s*[,、]\s*/);
+  if (displayTags.length > 1 && displayTags.every(value => gemTags.has(value))) {
+    return { text: displayTags.map(value => gemTags.get(value)).join(", "), converted: true, kind: "property" };
+  }
   const exact = manualExact.get(clean) || dictionary.exact?.[clean];
   if (exact) return { text: `${exact}${tag ? ` ${tag}` : ""}`, converted: true, kind: "known" };
   const prefixedName = prefixedItemName(clean);
@@ -197,8 +221,13 @@ function convertLine(line) {
       return { text: `Quality (${catalystQualities.get(catalyst[1])}): ${value}`, converted: true, kind: "property" };
     }
     if (fixed.has(key)) {
-      const translatedValue = (key === "半径" ? ({ 小:"Small", 中:"Medium", 大:"Large" }[value] || value) : value)
-        .replace(/メートル/g, "metres");
+      let translatedValue = value;
+      if (key === "半径") translatedValue = value.replace(/^(小|中|大|変更可能)/, match => ({ 小:"Small", 中:"Medium", 大:"Large", 変更可能:"Variable" }[match]));
+      if (key === "個数制限") {
+        const limited = value.match(/^(.+?)(\d+)つのみ$/);
+        if (limited) translatedValue = `${limited[2]} ${dictionary.exact?.[limited[1]] || limited[1]}`;
+      }
+      translatedValue = translatedValue.replace(/最大/g, "Max").replace(/メートル/g, "metres");
       return { text: `${fixed.get(key)}: ${translatedValue}`.trimEnd(), converted: true, kind: "property" };
     }
     if (/^[A-Za-z][A-Za-z ]*$/.test(key)) {
@@ -235,6 +264,7 @@ function convert(text) {
   const blocks = normalize(text).split(/\n-{5,}\n/);
   const outputBlocks = [];
   const multilineRules = dictionary.rules.filter(rule => rule.regex.source.includes("\\n"));
+  const multilineExact = Object.entries(dictionary.exact || {}).filter(([jp]) => jp.includes("\n"));
   const laterBoundary = blocks.map((block, index) => index > 0 && block.split("\n").some(isTerminalLine));
   let seenMod = false;
   for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
@@ -258,6 +288,17 @@ function convert(text) {
     const explicitlyIgnored = [];
     for (let i = 0; i < lines.length; i++) {
       let matched = false;
+      for (const [jp, en] of multilineExact) {
+        const lineCount = jp.split("\n").length;
+        if (lines.slice(i, i + lineCount).join("\n") !== jp) continue;
+        results.push({ text: en, converted: true, kind: "mod" });
+        converted += lineCount;
+        seenMod = true;
+        i += lineCount - 1;
+        matched = true;
+        break;
+      }
+      if (matched) continue;
       for (const rule of multilineRules) {
         const lineCount = (rule.regex.source.match(/\\n/g) || []).length + 1;
         const match = rule.regex.exec(lines.slice(i, i + lineCount).join("\n"));
