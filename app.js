@@ -375,6 +375,34 @@ function renderOutput(result) {
   }).join("\n");
 }
 
+function modLineKey(line) {
+  return line.trim()
+    .replace(/([+−-]?)\d+(?:\.\d+)?(?=\([+−-]?\d)/g, "$1")
+    .replace(/[+−-]?\d+(?:\.\d+)?(?:[-–][+−-]?\d+(?:\.\d+)?)?/g, "#")
+    .replace(/\s+/g, " ");
+}
+
+function normalizePobModOrder(results) {
+  for (let i = 0; i < results.length; i++) {
+    const metadata = results[i].text.match(/^\{ .*?(Prefix|Suffix) Modifier "([^"]+)"/);
+    if (!metadata) continue;
+    let end = i + 1;
+    while (end < results.length && /^(?:mod|raw|known)$/.test(results[end].kind)) end++;
+    const actual = results.slice(i + 1, end);
+    if (actual.length < 2) continue;
+    const actualKeys = actual.map(result => modLineKey(result.text)).sort().join("\n");
+    const layout = (dictionary.affixLayouts?.[metadata[2]] || []).find(candidate =>
+      candidate.type === metadata[1]
+      && candidate.lines.length === actual.length
+      && candidate.lines.map(modLineKey).sort().join("\n") === actualKeys
+    );
+    if (!layout) continue;
+    const pool = [...actual];
+    const ordered = layout.lines.map(line => pool.splice(pool.findIndex(result => modLineKey(result.text) === modLineKey(line)), 1)[0]);
+    results.splice(i + 1, actual.length, ...ordered);
+  }
+}
+
 function convert(text) {
   let converted = 0;
   const criticalUnknown = [];
@@ -446,6 +474,7 @@ function convert(text) {
     if (hasLaterBoundary && trailingFlavor >= 2) {
       results.splice(-trailingFlavor).forEach(result => ignored.push({ line: result.source || result.text, category: "tail", block: blockIndex + 1 }));
     }
+    normalizePobModOrder(results);
     const firstMod = results.findIndex(result => result.kind === "mod");
     const hasProperty = results.some(result => result.kind === "property");
     const hasState = results.some(result => result.kind === "state");
