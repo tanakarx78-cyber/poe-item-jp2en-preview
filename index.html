@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PoE 日本語 → 英語 アイテム変換器（試作公開版）</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background:#171717; color:#eee }
+    body { max-width:1100px; margin:24px auto; padding:0 18px }
+    h1 { color:#c6a76b; margin-bottom:6px }
+    .status,.summary { color:#bbb; font-size:.9rem }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:18px }
+    label { display:block; color:#d7bd88; font-weight:700; margin-bottom:7px }
+    textarea { width:100%; min-height:480px; box-sizing:border-box; padding:12px; resize:vertical; background:#242424; color:#fff; border:1px solid #555; border-radius:6px; font:13px/1.5 ui-monospace,monospace }
+    .actions { display:grid; grid-template-columns:1fr 2fr 1.3fr 1fr; gap:10px; margin-top:16px }
+    button { width:100%; padding:13px; border:0; border-radius:6px; background:#b99a5c; color:#111; font-weight:800; font-size:1rem; cursor:pointer }
+    #reset { background:#777; color:#fff }
+    button:disabled { opacity:.45; cursor:not-allowed }
+    .warning { color:#ffbd66 }
+    @media (max-width:760px) { .grid { grid-template-columns:1fr } .actions { grid-template-columns:1fr } textarea { min-height:340px } }
+  </style>
+</head>
+<body>
+  <h1>PoE 日本語 → 英語 アイテム変換器（試作公開版）</h1>
+  <div id="status" class="status">辞書を読み込んでいます…</div>
+  <div class="grid">
+    <section><label for="input">日本語アイテム</label><textarea id="input" spellcheck="false" placeholder="ゲーム内で Ctrl+C した内容を貼り付け"></textarea></section>
+    <section><label for="output">PoB用英語アイテム</label><textarea id="output" readonly spellcheck="false"></textarea></section>
+  </div>
+  <div class="actions">
+    <button id="paste" type="button">貼り付け</button>
+    <button id="convert" disabled>英語に変換</button>
+    <button id="copy" disabled>変換結果をコピー</button>
+    <button id="reset" type="button">リセット</button>
+  </div>
+  <p id="summary" class="summary"></p>
+  <script src="dictionary.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
