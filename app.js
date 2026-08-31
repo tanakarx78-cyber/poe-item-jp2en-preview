@@ -25,6 +25,7 @@ const manualExact = new Map([
   // The client uses 確率 in this unique-mod line while the trade data uses 率.
   ["ブロック確率が幸運になる", "Chance to Block is Lucky"],
   ["ブロック率が幸運になる", "Chance to Block is Lucky"],
+  ["アビス", "Abyss"],
   ["上品な傲慢", "Elegant Hubris"],
   ["範囲内のパッシブは永遠の帝国に征服される", "Passives in radius are Conquered by the Eternal Empire"],
   ["範囲内のパッシブはエターナル帝国に征服される", "Passives in radius are Conquered by the Eternal Empire"]
