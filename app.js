@@ -59,6 +59,17 @@ const catalystQualities = new Map([
   ["防御力モッド", "Defence Modifiers"], ["元素ダメージモッド", "Elemental Damage Modifiers"],
   ["クリティカルモッド", "Critical Modifiers"]
 ]);
+const metadataTags = new Map([
+  ["防御", "Defences"], ["防御力", "Defences"], ["アーマー", "Armour"],
+  ["回避", "Evasion"], ["回避力", "Evasion"], ["エナジーシールド", "Energy Shield"],
+  ["元素", "Elemental"], ["火", "Fire"], ["冷気", "Cold"], ["雷", "Lightning"],
+  ["混沌", "Chaos"], ["耐性", "Resistance"], ["ダメージ", "Damage"],
+  ["攻撃", "Attack"], ["アタック", "Attack"], ["キャスター", "Caster"],
+  ["スペル", "Spell"], ["クリティカル", "Critical"], ["マナ", "Mana"],
+  ["ライフ", "Life"], ["スピード", "Speed"], ["範囲", "Area"],
+  ["状態異常", "Ailment"], ["プレフィックス", "Prefix"], ["サフィックス", "Suffix"],
+  ["スケールできない値", "Unscalable Value"]
+]);
 const characterClasses = new Map([
   ["マローダー", "Marauder"], ["レンジャー", "Ranger"], ["ウィッチ", "Witch"],
   ["デュエリスト", "Duelist"], ["テンプラー", "Templar"], ["シャドウ", "Shadow"], ["サイオン", "Scion"]
@@ -75,7 +86,7 @@ const gemTags = new Map([
 ]);
 
 function normalize(text) {
-  return text.replace(/\r\n?/g, "\n").replace(/[：]/g, ":").trim();
+  return text.replace(/\r\n?/g, "\n").replace(/[：]/g, ":").replace(/[（）]/g, match => match === "（" ? "(" : ")").trim();
 }
 
 function applyTemplate(template, match) {
@@ -103,16 +114,57 @@ function translateBuffStat(text) {
   return manualExact.get(normalized) || dictionary.exact?.[normalized] || translateByRule(normalized);
 }
 
-function translateAdvancedMetadata(inner) {
-  const parts = inner.trim().split(/\s+[-—]\s+/);
-  parts[0] = dictionary.modifierTypes?.[parts[0]]
-    || parts[0].replace(/[ぁ-んァ-ヶ一-龯々ー]+モッド/g, "Modifier");
-  if (parts[1]) {
-    parts[1] = parts[1].split(/[、,]/).map(value => {
-      const tag = value.trim();
-      return dictionary.modTags?.[tag] || dictionary.modTags?.[`${tag}力`] || tag;
-    }).join(", ");
+function translateModifierType(value) {
+  const type = value.trim();
+  return dictionary.modifierTypes?.[type]
+    || ({ "プレフィックスモッド": "Prefix Modifier", "サフィックスモッド": "Suffix Modifier" }[type])
+    || type.replace(/[ぁ-んァ-ヶ一-龯々ー]+モッド/g, "Modifier");
+}
+
+function translateMetadataTag(value) {
+  const tag = value.trim();
+  return dictionary.modTags?.[tag]
+    || dictionary.modTags?.[`${tag}力`]
+    || metadataTags.get(tag)
+    || fixed.get(tag)
+    || tag;
+}
+
+function translateAffixName(name, type, options = {}) {
+  const candidates = dictionary.affixNames?.[name];
+  if (!Array.isArray(candidates) || !candidates.length) return "";
+  let filtered = candidates.filter(candidate => !type || candidate.type === type);
+  if (!filtered.length) filtered = candidates;
+  if (options.isCluster) {
+    const clusterCandidates = filtered.filter(candidate => candidate.domain === "affliction_jewel");
+    if (clusterCandidates.length) filtered = clusterCandidates;
   }
+  return filtered[0]?.name || "";
+}
+
+function translateAdvancedMetadata(inner, options = {}) {
+  const normalized = inner.trim()
+    .replace(/[「」『』]/g, '"')
+    .replace(/[：]/g, ":")
+    .replace(/[（）]/g, match => match === "（" ? "(" : ")");
+  const parts = normalized.split(/\s+[-—]\s+/);
+  let heading = parts.shift() || "";
+  const named = heading.match(/^(.+?モッド)\s*"([^"]*)"(.*)$/);
+  if (named) {
+    const modifierType = translateModifierType(named[1]);
+    const type = /\bPrefix\b/i.test(modifierType) ? "Prefix" : /\bSuffix\b/i.test(modifierType) ? "Suffix" : undefined;
+    const affixName = translateAffixName(named[2].trim(), type, options);
+    heading = `${modifierType}${affixName ? ` "${affixName}"` : ""}${named[3]}`;
+  } else {
+    const unnamed = heading.match(/^(.+?モッド)(.*)$/);
+    if (unnamed) heading = `${translateModifierType(unnamed[1])}${unnamed[2]}`;
+  }
+  heading = heading.replace(/\(\s*ティア\s*:\s*/gi, "(Tier: ");
+  parts.unshift(heading);
+  if (parts[1]) {
+    parts[1] = parts[1].split(/[、,・]/).map(translateMetadataTag).join(", ");
+  }
+  if (parts[2]) parts[2] = parts[2].replace(/^スケールできない値$/, "Unscalable Value");
   return parts.join(" - ");
 }
 
@@ -161,14 +213,18 @@ function baseNameFromDisplayName(value) {
   return found;
 }
 
-function convertLine(line) {
+function normalizeClusterLine(line, isClusterBlock) {
+  return isClusterBlock ? line.replace(/\s+\(enchant\)$/i, "") : line;
+}
+
+function convertLine(line, options = {}) {
   let original = line.trim().replace(/^##\s*/, "");
   if (!original) return { text: "", converted: true, kind: "empty" };
   if (/^-{5,}$/.test(original)) return { text: separator, converted: true, kind: "separator" };
   if (/^(?:メモ|Note):/i.test(original)) return { text: "", converted: true, omitted: true, ignored: true, kind: "tail", source: original };
   if (/^\(.*\)$/.test(original)) return { text: "", converted: true, omitted: true, ignored: true, kind: "tail", source: original };
   const advanced = original.match(/^\{\s*(.*?)\s*\}$/);
-  if (advanced) return { text: `{ ${translateAdvancedMetadata(advanced[1])} }`, converted: true, kind: "metadata" };
+  if (advanced) return { text: `{ ${translateAdvancedMetadata(advanced[1], options)} }`, converted: true, kind: "metadata" };
   const localizedLabel = original.match(/^\[([^|\]]+)\|[^\]]+\](.*)$/);
   if (localizedLabel) original = localizedLabel[1] + localizedLabel[2];
   const tagMatch = original.match(/\s+(\((?:enchant|implicit|fractured|crafted)\))$/i);
@@ -279,11 +335,13 @@ function convert(text) {
   const outputBlocks = [];
   const multilineRules = dictionary.rules.filter(rule => rule.regex.source.includes("\\n"));
   const multilineExact = Object.entries(dictionary.exact || {}).filter(([jp]) => jp.includes("\n"));
+  const itemIsCluster = blocks.some(block => /クラスタージュエル/.test(block));
   const laterBoundary = blocks.map((block, index) => index > 0 && block.split("\n").some(isTerminalLine));
   let seenMod = false;
   for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
     const block = blocks[blockIndex];
     const lines = block.split("\n").map(line => line.trim().replace(/^##\s*/, "")).filter(Boolean);
+    const isClusterBlock = itemIsCluster;
     const rarityIndex = lines.findIndex(line => /^レアリティ:\s*(?:ノーマル|マジック|レア)$/.test(line.replace("：", ":")));
     const rarity = rarityIndex >= 0 && lines[rarityIndex].replace("：", ":").split(":")[1].trim();
     if (rarity === "レア") {
@@ -304,7 +362,7 @@ function convert(text) {
       let matched = false;
       for (const [jp, en] of multilineExact) {
         const lineCount = jp.split("\n").length;
-        if (lines.slice(i, i + lineCount).join("\n") !== jp) continue;
+        if (lines.slice(i, i + lineCount).map(line => normalizeClusterLine(line, isClusterBlock)).join("\n") !== jp) continue;
         results.push({ text: en, converted: true, kind: "mod" });
         converted += lineCount;
         seenMod = true;
@@ -323,7 +381,7 @@ function convert(text) {
         break;
       }
       if (!matched) {
-        const result = convertLine(lines[i]);
+        const result = convertLine(normalizeClusterLine(lines[i], isClusterBlock), { isCluster: isClusterBlock });
         if (result.omitted) explicitlyIgnored.push(result);
         else if (result.text) results.push(result);
       }
