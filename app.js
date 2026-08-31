@@ -429,7 +429,7 @@ if (typeof document !== "undefined") {
     $("summary").className = `summary${result.criticalUnknown.length ? " warning" : ""}`;
     if (result.criticalUnknown.length) {
       const preview = result.criticalUnknown.slice(0, 4).map(item => `[${item.category}] ${item.line}`).join(" / ");
-      $("summary").textContent = `PoB必須項目の未変換 ${result.criticalUnknown.length}行（コピー不可） / PoB非依存項目を${result.ignored.length}行除外: ${preview}`;
+      $("summary").textContent = `PoB必須項目の未変換 ${result.criticalUnknown.length}行（コピー可能・赤文字表示） / PoB非依存項目を${result.ignored.length}行除外: ${preview}`;
     } else {
       $("summary").textContent = `変換完了: ${result.converted}行 / PoB非依存項目を${result.ignored.length}行除外`;
     }
