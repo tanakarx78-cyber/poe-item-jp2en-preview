@@ -121,7 +121,10 @@ function translateBuffStat(text) {
 function translateModifierType(value) {
   const type = value.trim();
   return dictionary.modifierTypes?.[type]
-    || ({ "プレフィックスモッド": "Prefix Modifier", "サフィックスモッド": "Suffix Modifier" }[type])
+    || ({
+      "プレフィックスモッド": "Prefix Modifier", "サフィックスモッド": "Suffix Modifier",
+      "マスタークラフトモッド": "Master Crafted Modifier"
+    }[type])
     || type.replace(/[ぁ-んァ-ヶ一-龯々ー]+モッド/g, "Modifier");
 }
 
@@ -134,17 +137,27 @@ function translateMetadataTag(value) {
     || tag;
 }
 
-function translateAffixName(name, type, options = {}) {
+function pickAffix(name, type, options = {}) {
   const lookupName = metadataAffixAliases.get(name) || name;
   const candidates = dictionary.affixNames?.[lookupName] || dictionary.affixNames?.[name];
-  if (!Array.isArray(candidates) || !candidates.length) return "";
+  if (!Array.isArray(candidates) || !candidates.length) return undefined;
   let filtered = candidates.filter(candidate => !type || candidate.type === type);
   if (!filtered.length) filtered = candidates;
   if (options.isCluster) {
     const clusterCandidates = filtered.filter(candidate => candidate.domain === "affliction_jewel");
     if (clusterCandidates.length) filtered = clusterCandidates;
   }
-  return filtered[0]?.name || "";
+  return filtered[0];
+}
+
+function translateAffixName(name, type, options = {}) {
+  return pickAffix(name, type, options)?.name || "";
+}
+
+function translateTierOrRank(value) {
+  return value
+    .replace(/\(\s*ティア\s*:\s*/gi, "(Tier: ")
+    .replace(/\(\s*ランク\s*:\s*/gi, "(Rank: ");
 }
 
 function translateAdvancedMetadata(inner, options = {}) {
@@ -154,17 +167,47 @@ function translateAdvancedMetadata(inner, options = {}) {
     .replace(/[（）]/g, match => match === "（" ? "(" : ")");
   const parts = normalized.split(/\s+[-—]\s+/);
   let heading = parts.shift() || "";
-  const named = heading.match(/^(.+?モッド)\s*"([^"]*)"(.*)$/);
-  if (named) {
-    const modifierType = translateModifierType(named[1]);
-    const type = /\bPrefix\b/i.test(modifierType) ? "Prefix" : /\bSuffix\b/i.test(modifierType) ? "Suffix" : undefined;
-    const affixName = translateAffixName(named[2].trim(), type, options);
-    heading = `${modifierType}${affixName ? ` "${affixName}"` : ""}${named[3]}`;
+  const quoted = heading.match(/"([^"]*)"/);
+  const quotedName = quoted?.[1]?.trim() || "";
+  const unquotedHeading = heading.replace(/\s*"[^"]*"\s*/, " ").trim();
+  const influence = [
+    ["シアリング・エグザーク", "Searing Exarch"],
+    ["Searing Exarch", "Searing Exarch"],
+    ["イーター・オブ・ワールズ", "Eater of Worlds"],
+    ["Eater of Worlds", "Eater of Worlds"]
+  ].find(([name]) => unquotedHeading.includes(name));
+  if (influence) {
+    const label = quotedName || unquotedHeading.match(/\(\s*([^):]+)\s*\)/)?.[1]?.trim();
+    const tier = {
+      "下級": "Lesser", "上級": "Greater", "大": "Grand",
+      "特大": "Exceptional", "極大": "Exquisite", "完璧": "Perfect",
+      "Lesser": "Lesser", "Greater": "Greater", "Grand": "Grand",
+      "Exceptional": "Exceptional", "Exquisite": "Exquisite", "Perfect": "Perfect"
+    }[label] || label;
+    heading = `${influence[1]} Implicit Modifier${tier ? ` (${tier})` : ""}`;
   } else {
-    const unnamed = heading.match(/^(.+?モッド)(.*)$/);
-    if (unnamed) heading = `${translateModifierType(unnamed[1])}${unnamed[2]}`;
+    const prefixHint = /(?:^|\s)(?:Prefix|プレフィックス)(?:\s|$)/i.test(unquotedHeading);
+    const suffixHint = /(?:^|\s)(?:Suffix|サフィックス)(?:\s|$)/i.test(unquotedHeading);
+    const fractured = /(?:^|\s)(?:Fractured|フラクチャー(?:モッド)?)(?:\s|$)/i.test(unquotedHeading);
+    const masterCrafted = /(?:Master\s+Crafted|マスタークラフト)/i.test(unquotedHeading);
+    const typeHint = prefixHint ? "Prefix" : suffixHint ? "Suffix" : undefined;
+    const affix = quotedName ? pickAffix(quotedName, typeHint, options) : undefined;
+    const affixType = typeHint || affix?.type;
+    const japaneseType = unquotedHeading.match(/(プレフィックスモッド|サフィックスモッド|暗黙モッド|クラフトモッド|エンチャントモッド|明示モッド|ユニークモッド|フラクチャーモッド|痕跡暗黙モッド|マスタークラフトモッド)/)?.[1];
+    const translatedType = japaneseType ? translateModifierType(japaneseType) : "";
+    let modifierType = translatedType;
+    if (masterCrafted) modifierType = `Master Crafted${affixType ? ` ${affixType}` : ""} Modifier`;
+    else if (fractured) modifierType = `Fractured${affixType ? ` ${affixType}` : ""} Modifier`;
+    else if (!modifierType) {
+      const englishType = unquotedHeading.match(/(?:Master\s+Crafted|Fractured|Prefix|Suffix|Implicit|Unique|Crafted|Enchantment|Explicit|Vestigial)\s+Modifier/i)?.[0];
+      modifierType = englishType || (affixType ? `${affixType} Modifier` : "Modifier");
+    } else if ((modifierType === "Modifier" || /^(?:Prefix|Suffix) Modifier$/i.test(modifierType)) && affixType) {
+      modifierType = `${affixType} Modifier`;
+    }
+    heading = `${modifierType}${affix?.name ? ` "${affix.name}"` : ""}`;
+    const tierOrRank = unquotedHeading.match(/\((?:\s*(?:ティア|Tier|ランク|Rank)\s*:\s*[^)]+)\)/i)?.[0];
+    if (tierOrRank) heading += ` ${translateTierOrRank(tierOrRank)}`;
   }
-  heading = heading.replace(/\(\s*ティア\s*:\s*/gi, "(Tier: ");
   parts.unshift(heading);
   if (parts[1]) {
     parts[1] = parts[1].split(/[、,・]/).map(translateMetadataTag).join(", ");
