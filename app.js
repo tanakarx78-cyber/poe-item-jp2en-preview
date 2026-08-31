@@ -95,8 +95,9 @@ function normalize(text) {
 }
 
 function applyTemplate(template, match) {
+  const captures = match.slice(1).filter(value => value !== undefined);
   return template.replace(/\$(\d+)/g, (_, n) => {
-    const value = match[Number(n)] ?? "";
+    const value = match[Number(n)] ?? (captures.length === 1 ? captures[0] : "");
     return dictionary?.exact?.[value] || value;
   });
 }
@@ -464,15 +465,16 @@ function convert(text) {
       }
     }
     explicitlyIgnored.forEach(result => ignored.push({ line: result.source || result.text, category: "tail", block: blockIndex + 1 }));
+    const hasMetadata = results.some(result => result.kind === "metadata");
     const blockHasMod = results.some(result => result.kind === "mod" || (result.kind === "known" && blockIndex > 0));
-    const ignoredBlock = isIgnorableBlock(results, hasLaterBoundary, seenMod || blockHasMod, blockIndex === blocks.length - 1);
+    const ignoredBlock = !hasMetadata && isIgnorableBlock(results, hasLaterBoundary, seenMod || blockHasMod, blockIndex === blocks.length - 1);
     if (ignoredBlock) {
       results.forEach(result => ignored.push({ line: result.source || result.text, category: "tail", block: blockIndex + 1 }));
       continue;
     }
     let trailingFlavor = 0;
     for (let i = results.length - 1; i >= 0 && results[i].kind === "unknown" && isNarrativeLine(results[i].source || results[i].text); i--) trailingFlavor++;
-    if (hasLaterBoundary && trailingFlavor >= 2) {
+    if (!hasMetadata && hasLaterBoundary && trailingFlavor >= 2) {
       results.splice(-trailingFlavor).forEach(result => ignored.push({ line: result.source || result.text, category: "tail", block: blockIndex + 1 }));
     }
     normalizePobModOrder(results);
