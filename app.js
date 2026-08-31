@@ -70,6 +70,10 @@ const metadataTags = new Map([
   ["状態異常", "Ailment"], ["プレフィックス", "Prefix"], ["サフィックス", "Suffix"],
   ["スケールできない値", "Unscalable Value"]
 ]);
+const metadataAffixAliases = new Map([
+  // Some Japanese client builds show the seal suffix with an extra "ジア".
+  ["アジアカの", "アシカの"]
+]);
 const characterClasses = new Map([
   ["マローダー", "Marauder"], ["レンジャー", "Ranger"], ["ウィッチ", "Witch"],
   ["デュエリスト", "Duelist"], ["テンプラー", "Templar"], ["シャドウ", "Shadow"], ["サイオン", "Scion"]
@@ -131,7 +135,8 @@ function translateMetadataTag(value) {
 }
 
 function translateAffixName(name, type, options = {}) {
-  const candidates = dictionary.affixNames?.[name];
+  const lookupName = metadataAffixAliases.get(name) || name;
+  const candidates = dictionary.affixNames?.[lookupName] || dictionary.affixNames?.[name];
   if (!Array.isArray(candidates) || !candidates.length) return "";
   let filtered = candidates.filter(candidate => !type || candidate.type === type);
   if (!filtered.length) filtered = candidates;
