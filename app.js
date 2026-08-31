@@ -257,6 +257,20 @@ function isIgnorableBlock(results, hasLaterBoundary, hasPriorMod, isLastBlock) {
     && unknown.some(result => isNarrativeLine(result.source || result.text));
 }
 
+function escapeHtml(value) {
+  return value.replace(/[&<>"']/g, character => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[character]));
+}
+
+function renderOutput(result) {
+  const unknown = new Map();
+  for (const item of result.criticalUnknown) unknown.set(item.line, (unknown.get(item.line) || 0) + 1);
+  return result.output.split("\n").map(line => {
+    const count = unknown.get(line) || 0;
+    if (count) { unknown.set(line, count - 1); return `<span class="unknown-required">${escapeHtml(line)}</span>`; }
+    return escapeHtml(line);
+  }).join("\n");
+}
+
 function convert(text) {
   let converted = 0;
   const criticalUnknown = [];
@@ -407,9 +421,10 @@ if (typeof document !== "undefined") {
   $("convert").addEventListener("click", () => {
     const result = convert($("input").value);
     $("output").value = result.output;
+    $("output-display").innerHTML = renderOutput(result);
     if ($("report-output")) $("report-output").value = formatReport(result);
     if ($("report-panel")) $("report-panel").hidden = false;
-    $("copy").disabled = !result.output || result.criticalUnknown.length > 0;
+    $("copy").disabled = !result.output;
     if ($("copy-report")) $("copy-report").disabled = false;
     $("summary").className = `summary${result.criticalUnknown.length ? " warning" : ""}`;
     if (result.criticalUnknown.length) {
@@ -433,6 +448,7 @@ if (typeof document !== "undefined") {
     try {
       $("input").value = await navigator.clipboard.readText();
       $("output").value = "";
+      $("output-display").innerHTML = "";
       if ($("report-output")) $("report-output").value = "";
       if ($("report-panel")) $("report-panel").hidden = true;
       $("copy").disabled = true;
@@ -448,6 +464,7 @@ if (typeof document !== "undefined") {
   $("reset").addEventListener("click", () => {
     $("input").value = "";
     $("output").value = "";
+    $("output-display").innerHTML = "";
     if ($("report-output")) $("report-output").value = "";
     if ($("report-panel")) $("report-panel").hidden = true;
     $("copy").disabled = true;
