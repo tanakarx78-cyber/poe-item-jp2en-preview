@@ -1,5 +1,9 @@
 let dictionary;
 
+const APP_VERSION = "v0.2.1";
+const APP_UPDATED = "2026-09-01 16:57 JST";
+const ISSUE_REPOSITORY = "tanakarx78-cyber/poe-item-jp2en-preview";
+
 const $ = id => document.getElementById(id);
 const separator = "--------";
 const itemTypes = new Map([
@@ -145,11 +149,19 @@ function pickAffix(name, type, options = {}) {
   if (!Array.isArray(candidates) || !candidates.length) return undefined;
   let filtered = candidates.filter(candidate => !type || candidate.type === type);
   if (!filtered.length) filtered = candidates;
-  if (options.isCluster) {
-    const clusterCandidates = filtered.filter(candidate => candidate.domain === "affliction_jewel");
-    if (clusterCandidates.length) filtered = clusterCandidates;
-  }
+  const domain = options.affixDomain || (options.isCluster ? "affliction_jewel" : "item");
+  const domainCandidates = filtered.filter(candidate => candidate.domain === domain);
+  if (domainCandidates.length) filtered = domainCandidates;
   return filtered[0];
+}
+
+function affixDomainForItem(text) {
+  if (/クラスタージュエル/.test(text)) return "affliction_jewel";
+  if (/アイテムクラス:\s*アビスジュエル/.test(text)) return "abyss_jewel";
+  if (/アイテムクラス:\s*チャーム/.test(text)) return "affliction_charm";
+  if (/アイテムクラス:\s*ティンクチャー/.test(text)) return "tincture";
+  if (/アイテムクラス:\s*[^\n]*フラスコ/.test(text)) return "flask";
+  return "item";
 }
 
 function translateAffixName(name, type, options = {}) {
@@ -193,7 +205,8 @@ function translateAdvancedMetadata(inner, options = {}) {
     const fractured = /(?:^|\s)(?:Fractured|フラクチャー(?:モッド)?)(?:\s|$)/i.test(unquotedHeading);
     const masterCrafted = /(?:Master\s+Crafted|マスタークラフト)/i.test(unquotedHeading);
     const typeHint = prefixHint ? "Prefix" : suffixHint ? "Suffix" : undefined;
-    const affix = quotedName ? pickAffix(quotedName, typeHint, options) : undefined;
+    const affixDomain = masterCrafted ? "crafted" : options.affixDomain;
+    const affix = quotedName ? pickAffix(quotedName, typeHint, { ...options, affixDomain }) : undefined;
     const affixType = typeHint || affix?.type;
     const japaneseType = unquotedHeading.match(/(プレフィックスモッド|サフィックスモッド|暗黙モッド|クラフトモッド|エンチャントモッド|明示モッド|ユニークモッド|フラクチャーモッド|痕跡暗黙モッド|マスタークラフトモッド)/)?.[1];
     const translatedType = japaneseType ? translateModifierType(japaneseType) : "";
@@ -414,6 +427,7 @@ function convert(text) {
   const multilineRules = dictionary.rules.filter(rule => rule.regex.source.includes("\\n"));
   const multilineExact = Object.entries(dictionary.exact || {}).filter(([jp]) => jp.includes("\n"));
   const itemIsCluster = blocks.some(block => /クラスタージュエル/.test(block));
+  const affixDomain = affixDomainForItem(normalize(text));
   const laterBoundary = blocks.map((block, index) => index > 0 && block.split("\n").some(isTerminalLine));
   let seenMod = false;
   for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
@@ -459,7 +473,7 @@ function convert(text) {
         break;
       }
       if (!matched) {
-        const result = convertLine(normalizeClusterLine(lines[i], isClusterBlock), { isCluster: isClusterBlock });
+        const result = convertLine(normalizeClusterLine(lines[i], isClusterBlock), { isCluster: isClusterBlock, affixDomain });
         if (result.omitted) explicitlyIgnored.push(result);
         else if (result.text) results.push(result);
       }
@@ -522,6 +536,47 @@ function formatReport(result) {
   ].join("\n");
 }
 
+function sanitizeReportSource(source) {
+  return normalize(source).split("\n")
+    .filter(line => !/^(?:メモ|Note):/i.test(line.trim()) && !/~b\/o\b/i.test(line))
+    .join("\n");
+}
+
+function buildIssueBody(result, source, userAgent = "") {
+  return [
+    "## 環境",
+    `- Version: ${APP_VERSION}`,
+    `- Updated: ${APP_UPDATED}`,
+    userAgent ? `- Browser: ${userAgent}` : "",
+    "",
+    "## 未変換レポート",
+    "```text",
+    formatReport(result),
+    "```",
+    "",
+    "## 日本語の元データ（取引メモ除外済み）",
+    "```text",
+    sanitizeReportSource(source),
+    "```",
+    "",
+    "## 英語変換結果",
+    "```text",
+    result.output,
+    "```",
+    "",
+    "## 補足",
+    "ここへ症状やPoBでの表示結果を追記してください。"
+  ].filter(line => line !== "").join("\n");
+}
+
+function buildIssueUrl(result, body) {
+  const itemClass = result.output.match(/^Item Class:\s*(.+)$/m)?.[1] || "Unknown item";
+  const url = new URL(`https://github.com/${ISSUE_REPOSITORY}/issues/new`);
+  url.searchParams.set("title", `[未変換] ${itemClass} / ${result.criticalUnknown.length}行`);
+  url.searchParams.set("body", body);
+  return url.toString();
+}
+
 async function copyField(field, successMessage) {
   try {
     await navigator.clipboard.writeText(field.value);
@@ -556,14 +611,17 @@ async function loadDictionary() {
 }
 
 if (typeof document !== "undefined") {
+  let lastResult;
   $("convert").addEventListener("click", () => {
     const result = convert($("input").value);
+    lastResult = result;
     $("output").value = result.output;
     $("output-display").innerHTML = renderOutput(result);
     if ($("report-output")) $("report-output").value = formatReport(result);
     if ($("report-panel")) $("report-panel").hidden = false;
     $("copy").disabled = !result.output;
     if ($("copy-report")) $("copy-report").disabled = false;
+    if ($("github-report")) $("github-report").disabled = !result.criticalUnknown.length;
     $("summary").className = `summary${result.criticalUnknown.length ? " warning" : ""}`;
     if (result.criticalUnknown.length) {
       const preview = result.criticalUnknown.slice(0, 4).map(item => `[${item.category}] ${item.line}`).join(" / ");
@@ -582,6 +640,31 @@ if (typeof document !== "undefined") {
     if (!report.value) return;
     await copyField(report, "未変換レポートをコピーしました");
   });
+  $("github-report")?.addEventListener("click", () => {
+    if (!lastResult?.criticalUnknown.length) return;
+    $("issue-report").value = buildIssueBody(lastResult, $("input").value, navigator.userAgent);
+    $("issue-dialog").showModal();
+  });
+  $("issue-cancel")?.addEventListener("click", () => $("issue-dialog").close());
+  $("issue-open")?.addEventListener("click", async () => {
+    const report = $("issue-report");
+    let body = report.value;
+    let url = buildIssueUrl(lastResult, body);
+    const issueTab = window.open("about:blank", "_blank");
+    if (!issueTab) {
+      $("summary").className = "summary warning";
+      $("summary").textContent = "GitHubを開けませんでした。ポップアップを許可してください";
+      return;
+    }
+    issueTab.opener = null;
+    if (url.length > 7000) {
+      await copyField(report, "長いレポートをコピーしました。GitHubの本文欄へ貼り付けてください");
+      body = "レポートが長いためクリップボードへコピーしました。この文章を消して貼り付けてください。";
+      url = buildIssueUrl(lastResult, body);
+    }
+    issueTab.location.href = url;
+    $("issue-dialog").close();
+  });
   $("paste").addEventListener("click", async () => {
     try {
       $("input").value = await navigator.clipboard.readText();
@@ -591,6 +674,7 @@ if (typeof document !== "undefined") {
       if ($("report-panel")) $("report-panel").hidden = true;
       $("copy").disabled = true;
       if ($("copy-report")) $("copy-report").disabled = true;
+      if ($("github-report")) $("github-report").disabled = true;
       $("summary").className = "summary";
       $("summary").textContent = "クリップボードから貼り付けました";
     } catch {
@@ -607,6 +691,7 @@ if (typeof document !== "undefined") {
     if ($("report-panel")) $("report-panel").hidden = true;
     $("copy").disabled = true;
     if ($("copy-report")) $("copy-report").disabled = true;
+    if ($("github-report")) $("github-report").disabled = true;
     $("summary").className = "summary";
     $("summary").textContent = "リセットしました";
     $("input").focus();
@@ -614,4 +699,4 @@ if (typeof document !== "undefined") {
   loadDictionary();
 }
 
-if (typeof module !== "undefined") module.exports = { convert, convertLine, formatReport, normalize, setDictionary: value => { dictionary = value; } };
+if (typeof module !== "undefined") module.exports = { convert, convertLine, formatReport, sanitizeReportSource, buildIssueBody, buildIssueUrl, normalize, setDictionary: value => { dictionary = value; } };
