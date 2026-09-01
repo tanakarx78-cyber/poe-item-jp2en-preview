@@ -1,7 +1,7 @@
 let dictionary;
 
-const APP_VERSION = "v0.2.2";
-const APP_UPDATED = "2026-09-01 17:25 JST";
+const APP_VERSION = "v0.2.4";
+const APP_UPDATED = "2026-09-01 17:55 JST";
 const ISSUE_REPOSITORY = "tanakarx78-cyber/poe-item-jp2en-preview";
 
 const $ = id => document.getElementById(id);
@@ -93,6 +93,17 @@ const gemTags = new Map([
   ["チャネリング", "Channelling"], ["トリガー", "Trigger"], ["ガード", "Guard"], ["ウォークライ", "Warcry"],
   ["ブリンク", "Blink"], ["ブランド", "Brand"], ["弓", "Bow"], ["オーブ", "Orb"]
 ]);
+const supportedSkillContexts = new Map([
+  ["ソケットされたジェム", "Socketed Gems"],
+  ["ヘルメットにソケットされたスキル", "Skills Socketed in your Helmet"],
+  ["グローブにソケットされたスキル", "Skills Socketed in your Gloves"],
+  ["ブーツにソケットされたスキル", "Skills Socketed in your Boots"],
+  ["パッシブツリーによって付与されたスキル", "Skills granted by your Passive Tree"],
+  ["装備中の鎧によるスキル", "Skills from Equipped Body Armour"],
+  ["サポートされたジェム", "Socketed Gems"],
+  ["ソケットされたスペル", "Socketed Spells"],
+  ["ソケットされたスラムジェム", "Socketed Slam Gems"]
+]);
 
 function normalize(text) {
   return text.replace(/\r\n?/g, "\n").replace(/[：]/g, ":").replace(/[（）]/g, match => match === "（" ? "(" : ")").trim();
@@ -115,8 +126,8 @@ function translateByRule(text) {
   const variants = [text];
   const advancedRoll = text.match(/^([^()\d]+)\([^)]*[ぁ-んァ-ヶ一-龯][^)]*\)(の.+)$/);
   if (advancedRoll) variants.push(advancedRoll[1] + advancedRoll[2]);
-  if (/によってサポートされる$/.test(text)) {
-    const withoutDisplayAlias = text.replace(/([ぁ-んァ-ヶ一-龯々ー]+)\([^()]*-[^()]*\)(?=によってサポートされる)/g, "$1");
+  if (/(?:により|によって|に)サポートされる$/.test(text)) {
+    const withoutDisplayAlias = text.replace(/([ぁ-んァ-ヶ一-龯々ー]+)\([^()]*-[^()]*\)(?=(?:により|によって|に)サポートされる)/g, "$1");
     if (withoutDisplayAlias !== text) variants.unshift(withoutDisplayAlias);
   }
   for (const variant of variants) {
@@ -125,6 +136,29 @@ function translateByRule(text) {
       if (match) return applyTemplate(rule.en, match);
     }
   }
+}
+
+function translateSupportName(name) {
+  const exact = exactLookup(name);
+  if (exact) return exact;
+  const canonical = `ソケットされたジェムはレベル1${name}によりサポートされる`;
+  const translated = translateByRule(canonical);
+  const match = translated?.match(/^Socketed Gems are [Ss]upported by Level 1 (.+)$/);
+  return match && !containsJapanese(match[1]) ? match[1] : undefined;
+}
+
+function translateSupportedByLevel(text) {
+  const match = text.match(/^(.+?)はレベル\s*([+−-]?[\d.,]+(?:\([+−-]?[\d.,]+(?:\s*[-–]\s*[+−-]?[\d.,]+)?\))?)\s*(.+?)(?:により|によって|に)サポートされる$/);
+  if (!match || !supportedSkillContexts.has(match[1])) return;
+  const supportName = match[3].replace(/\([^()]*-[^()]*\)$/, "").trim();
+  const translatedSupport = translateSupportName(supportName);
+  const levelLabel = /^(?:ソケットされたジェム|サポートされたジェム)$/.test(match[1]) ? "Level" : "level";
+  const translated = `${supportedSkillContexts.get(match[1])} are Supported by ${levelLabel} ${match[2]} ${translatedSupport || supportName}`;
+  return { text: translated, converted: Boolean(translatedSupport), incomplete: !translatedSupport, kind: "mod", source: text };
+}
+
+function containsJapanese(text) {
+  return /[ぁ-んァ-ヶ一-龯々]/.test(text);
 }
 
 function translateBuffStat(text) {
@@ -307,6 +341,16 @@ function convertLine(line, options = {}) {
   const clean = original.replace(/\s+(\((?:enchant|implicit|fractured|crafted)\))$/i, "")
     .replace(/\s*[-—]\s*(?:プレフィックス|サフィックス|スケールできない値)\s*$/, "");
 
+  const directRule = translateByRule(clean);
+  if (/(?:により|によって|に)サポートされる$/.test(clean) && directRule && !containsJapanese(directRule) && !/\b[Ll]evel\s+\d\s+\d/.test(directRule)) {
+    return { text: `${directRule}${tag ? ` ${tag}` : ""}`, converted: true, kind: "mod" };
+  }
+  const supportedByLevel = translateSupportedByLevel(clean);
+  if (supportedByLevel) {
+    if (tag) supportedByLevel.text += ` ${tag}`;
+    return supportedByLevel;
+  }
+
   if (itemTypes.has(clean)) return { text: itemTypes.get(clean), converted: true, kind: "property" };
   if (dictionary.classes?.[clean]) return { text: dictionary.classes[clean], converted: true, kind: "property" };
   if (stateWords.has(clean)) return { text: stateWords.get(clean), converted: true, kind: "state" };
@@ -338,6 +382,9 @@ function convertLine(line, options = {}) {
   }
   const exact = manualExact.get(clean) || exactLookup(clean);
   if (exact) return { text: `${exact}${tag ? ` ${tag}` : ""}`, converted: true, kind: "known" };
+  const allGemLevels = clean.match(/^全ての(.+?)(?:\([^()]*-[^()]*\))?ジェムのレベル\s*([+−-]?\d+)$/);
+  const allGemName = allGemLevels && exactLookup(allGemLevels[1]);
+  if (allGemName) return { text: `${allGemLevels[2]} to Level of all ${allGemName} Gems${tag ? ` ${tag}` : ""}`, converted: true, kind: "mod" };
   const dragonfangGem = clean.match(/^\+(.+?)(?:\([^()]*-[^()]*\))? to Level of all (\d+) Gems$/);
   const gemName = dragonfangGem && exactLookup(dragonfangGem[1]);
   if (gemName) return { text: `+${dragonfangGem[2]} to Level of all ${gemName} Gems`, converted: true, kind: "mod" };
@@ -369,7 +416,7 @@ function convertLine(line, options = {}) {
     }
   }
 
-  const translatedRule = translateByRule(clean);
+  const translatedRule = directRule || translateByRule(clean);
   if (translatedRule) return { text: `${translatedRule}${tag ? ` ${tag}` : ""}`, converted: true, kind: "mod" };
 
   if (![...clean].some(c => /[ぁ-んァ-ヶ一-龯]/.test(c))) return { text: clean, converted: true, kind: "raw" };
@@ -504,6 +551,13 @@ function convert(text) {
         else if (result.text) results.push(result);
       }
     }
+    for (const result of results) {
+      if (result.converted && containsJapanese(result.text)) {
+        result.converted = false;
+        result.incomplete = true;
+        result.source ||= result.text;
+      }
+    }
     explicitlyIgnored.forEach(result => ignored.push({ line: result.source || result.text, category: "tail", block: blockIndex + 1 }));
     const hasMetadata = results.some(result => result.kind === "metadata");
     const blockHasMod = results.some(result => result.kind === "mod" || (result.kind === "known" && blockIndex > 0));
@@ -529,15 +583,19 @@ function convert(text) {
         continue;
       }
       if (result.converted) converted++;
-      if (result.kind === "unknown") {
-        const category = blockIndex === 0 ? "header"
+      if (result.kind === "unknown" || result.incomplete) {
+        const category = result.kind === "mod" ? "mod"
+          : result.kind === "property" ? "property"
+          : result.kind === "header" ? "header"
+          : result.kind === "metadata" ? "metadata"
+          : blockIndex === 0 ? "header"
           : firstMod >= 0 && resultIndex >= firstMod ? "mod"
           : hasProperty ? "property"
           : /:/.test(result.source || result.text) ? "property"
           : hasState ? "state"
           : blockIndex > 0 ? "mod"
           : "unknown-structure";
-        criticalUnknown.push({ line: result.source || result.text, category, block: blockIndex + 1 });
+        criticalUnknown.push({ line: result.incomplete ? result.text : result.source || result.text, category, block: blockIndex + 1, source: result.source });
       }
     }
     const outputLines = results.filter(result => !result.omitted).map(result => result.text);
