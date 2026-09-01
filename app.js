@@ -1,7 +1,7 @@
 let dictionary;
 
-const APP_VERSION = "v0.2.4";
-const APP_UPDATED = "2026-09-01 17:55 JST";
+const APP_VERSION = "v0.2.8";
+const APP_UPDATED = "2026-09-01 22:48 JST";
 const ISSUE_REPOSITORY = "tanakarx78-cyber/poe-item-jp2en-preview";
 
 const $ = id => document.getElementById(id);
@@ -341,6 +341,27 @@ function convertLine(line, options = {}) {
   const clean = original.replace(/\s+(\((?:enchant|implicit|fractured|crafted)\))$/i, "")
     .replace(/\s*[-—]\s*(?:プレフィックス|サフィックス|スケールできない値)\s*$/, "");
 
+  if (options.isMercenaryWarrant) {
+    const support = clean.match(/^(.+?)\s*\(ティア:\s*(\d+)\)$/);
+    if (support) {
+      const name = dictionary.mercenarySupports?.[support[1]] || exactLookup(support[1]);
+      if (name) return { text: `${name} (Tier: ${support[2]})`, converted: true, kind: "property" };
+    }
+    const build = clean.match(/^ビルド:\s*(.+)$/);
+    if (build) {
+      const rawName = build[1].trim();
+      const infamous = rawName.match(/^(?:悪名高い|悪名高き|インファマス)\s*(.+)$/);
+      const japaneseName = (infamous?.[1] || rawName).trim();
+      const englishName = dictionary.mercenaryBuilds?.[rawName] || dictionary.mercenaryBuilds?.[japaneseName] || exactLookup(japaneseName);
+      const value = englishName || rawName;
+      return { text: `Build: ${value}`, converted: Boolean(englishName), incomplete: !englishName, kind: "property", source: original };
+    }
+    const level = clean.match(/^傭兵のレベル:\s*(\d+)$/);
+    if (level) return { text: `Mercenary Level: ${level[1]}`, converted: true, kind: "property" };
+    const skill = dictionary.mercenarySkills?.[clean] || dictionary.mercenarySkills?.[clean.replaceAll(":", "：")];
+    if (skill) return { text: skill, converted: true, kind: "property" };
+  }
+
   const directRule = translateByRule(clean);
   if (/(?:により|によって|に)サポートされる$/.test(clean) && directRule && !containsJapanese(directRule) && !/\b[Ll]evel\s+\d\s+\d/.test(directRule)) {
     return { text: `${directRule}${tag ? ` ${tag}` : ""}`, converted: true, kind: "mod" };
@@ -489,6 +510,8 @@ function convert(text) {
   const multilineRules = dictionary.rules.filter(rule => rule.regex.source.includes("\\n"));
   const multilineExact = Object.entries(dictionary.exact || {}).filter(([jp]) => jp.includes("\n"));
   const itemIsCluster = blocks.some(block => /クラスタージュエル/.test(block));
+  const itemIsMercenaryWarrant = blocks.some(block => /傭兵の召喚状|Mercenary Warrant/.test(block));
+  const mercenaryBuildBlock = itemIsMercenaryWarrant ? blocks.findIndex(block => /(?:^|\n)ビルド\s*[：:]/.test(block)) : -1;
   const affixDomain = affixDomainForItem(normalize(text));
   const laterBoundary = blocks.map((block, index) => index > 0 && block.split("\n").some(isTerminalLine));
   let seenMod = false;
@@ -546,13 +569,16 @@ function convert(text) {
         break;
       }
       if (!matched) {
-        const result = convertLine(normalizeClusterLine(lines[i], isClusterBlock), { isCluster: isClusterBlock, affixDomain });
+        const result = convertLine(normalizeClusterLine(lines[i], isClusterBlock), { isCluster: isClusterBlock, affixDomain, isMercenaryWarrant: itemIsMercenaryWarrant });
         if (result.omitted) explicitlyIgnored.push(result);
         else if (result.text) results.push(result);
       }
     }
+    if (itemIsMercenaryWarrant && blockIndex === mercenaryBuildBlock - 1 && results.length === 1 && results[0].kind === "unknown") {
+      results[0] = { ...results[0], converted: true, preserveJapanese: true, kind: "mercenary-name" };
+    }
     for (const result of results) {
-      if (result.converted && containsJapanese(result.text)) {
+      if (result.converted && !result.preserveJapanese && containsJapanese(result.text)) {
         result.converted = false;
         result.incomplete = true;
         result.source ||= result.text;
