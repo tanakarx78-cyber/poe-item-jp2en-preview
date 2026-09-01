@@ -1,7 +1,7 @@
 let dictionary;
 
-const APP_VERSION = "v0.2.1";
-const APP_UPDATED = "2026-09-01 16:57 JST";
+const APP_VERSION = "v0.2.2";
+const APP_UPDATED = "2026-09-01 17:25 JST";
 const ISSUE_REPOSITORY = "tanakarx78-cyber/poe-item-jp2en-preview";
 
 const $ = id => document.getElementById(id);
@@ -102,14 +102,23 @@ function applyTemplate(template, match) {
   const captures = match.slice(1).filter(value => value !== undefined);
   return template.replace(/\$(\d+)/g, (_, n) => {
     const value = match[Number(n)] ?? (captures.length === 1 ? captures[0] : "");
-    return dictionary?.exact?.[value] || value;
+    return exactLookup(value) || value;
   });
+}
+
+function exactLookup(value) {
+  return dictionary?.exact?.[value]
+    || dictionary?.exact?.[value.replace(/\(/g, "（").replace(/\)/g, "）")];
 }
 
 function translateByRule(text) {
   const variants = [text];
   const advancedRoll = text.match(/^([^()\d]+)\([^)]*[ぁ-んァ-ヶ一-龯][^)]*\)(の.+)$/);
   if (advancedRoll) variants.push(advancedRoll[1] + advancedRoll[2]);
+  if (/によってサポートされる$/.test(text)) {
+    const withoutDisplayAlias = text.replace(/([ぁ-んァ-ヶ一-龯々ー]+)\([^()]*-[^()]*\)(?=によってサポートされる)/g, "$1");
+    if (withoutDisplayAlias !== text) variants.unshift(withoutDisplayAlias);
+  }
   for (const variant of variants) {
     for (const rule of dictionary.rules || []) {
       const match = rule.regex.exec(variant);
@@ -121,7 +130,7 @@ function translateByRule(text) {
 function translateBuffStat(text) {
   let normalized = text.replace(/^(.+?)([+−-][\d.,]+(?:\([^)]+\))?(?:\s+\(augmented\))?)$/, "$1 $2");
   normalized = normalized.replace(/^(.+?)([+−-]?[\d.,]+(?:\([^)]+\))?(?:\s+\(augmented\))?%)(増加|減少|上昇|低下)$/, "$1が$2$3する");
-  return manualExact.get(normalized) || dictionary.exact?.[normalized] || translateByRule(normalized);
+  return manualExact.get(normalized) || exactLookup(normalized) || translateByRule(normalized);
 }
 
 function translateModifierType(value) {
@@ -200,8 +209,8 @@ function translateAdvancedMetadata(inner, options = {}) {
     }[label] || label;
     heading = `${influence[1]} Implicit Modifier${tier ? ` (${tier})` : ""}`;
   } else {
-    const prefixHint = /(?:^|\s)(?:Prefix|プレフィックス)(?:\s|$)/i.test(unquotedHeading);
-    const suffixHint = /(?:^|\s)(?:Suffix|サフィックス)(?:\s|$)/i.test(unquotedHeading);
+    const prefixHint = /(?:^|\s)(?:Prefix|プレフィックス(?:モッド)?)(?:\s|$)/i.test(unquotedHeading);
+    const suffixHint = /(?:^|\s)(?:Suffix|サフィックス(?:モッド)?)(?:\s|$)/i.test(unquotedHeading);
     const fractured = /(?:^|\s)(?:Fractured|フラクチャー(?:モッド)?)(?:\s|$)/i.test(unquotedHeading);
     const masterCrafted = /(?:Master\s+Crafted|マスタークラフト)/i.test(unquotedHeading);
     const typeHint = prefixHint ? "Prefix" : suffixHint ? "Suffix" : undefined;
@@ -227,12 +236,15 @@ function translateAdvancedMetadata(inner, options = {}) {
   if (parts[1]) {
     parts[1] = parts[1].split(/[、,・]/).map(translateMetadataTag).join(", ");
   }
-  if (parts[2]) parts[2] = parts[2].replace(/^スケールできない値$/, "Unscalable Value");
+  if (parts[2]) parts[2] = parts[2]
+    .replace(/^スケールできない値$/, "Unscalable Value")
+    .replace(/^(\d+(?:\.\d+)?)%(?:増加|上昇)$/, "$1% increased")
+    .replace(/^(\d+(?:\.\d+)?)%(?:減少|低下)$/, "$1% reduced");
   return parts.join(" - ");
 }
 
 function foilType(value) {
-  if (dictionary?.exact?.[value]) return dictionary.exact[value];
+  if (exactLookup(value)) return exactLookup(value);
   const celestial = value.match(/^天体の(.+)$/);
   if (celestial && foilColors.has(celestial[1])) return `Celestial ${foilColors.get(celestial[1])}`;
   return value;
@@ -263,7 +275,7 @@ function prefixedItemName(value) {
     if (!value.startsWith(jp)) continue;
     const suffix = value.slice(jp.length);
     if (!/^[\s・]/.test(suffix)) continue;
-    const name = dictionary.exact?.[suffix.replace(/^[\s・]+/, "")];
+    const name = exactLookup(suffix.replace(/^[\s・]+/, ""));
     if (name) return `${en} ${name}`;
   }
 }
@@ -324,8 +336,11 @@ function convertLine(line, options = {}) {
   if (displayTags.length > 1 && displayTags.every(value => gemTags.has(value))) {
     return { text: displayTags.map(value => gemTags.get(value)).join(", "), converted: true, kind: "property" };
   }
-  const exact = manualExact.get(clean) || dictionary.exact?.[clean];
+  const exact = manualExact.get(clean) || exactLookup(clean);
   if (exact) return { text: `${exact}${tag ? ` ${tag}` : ""}`, converted: true, kind: "known" };
+  const dragonfangGem = clean.match(/^\+(.+?)(?:\([^()]*-[^()]*\))? to Level of all (\d+) Gems$/);
+  const gemName = dragonfangGem && exactLookup(dragonfangGem[1]);
+  if (gemName) return { text: `+${dragonfangGem[2]} to Level of all ${gemName} Gems`, converted: true, kind: "mod" };
   const prefixedName = prefixedItemName(clean);
   if (prefixedName) return { text: prefixedName, converted: true, kind: "known" };
 
@@ -344,7 +359,7 @@ function convertLine(line, options = {}) {
       if (key === "半径") translatedValue = value.replace(/^(小|中|大|変更可能)/, match => ({ 小:"Small", 中:"Medium", 大:"Large", 変更可能:"Variable" }[match]));
       if (key === "個数制限") {
         const limited = value.match(/^(.+?)(\d+)つのみ$/);
-        if (limited) translatedValue = `${limited[2]} ${dictionary.exact?.[limited[1]] || limited[1]}`;
+        if (limited) translatedValue = `${limited[2]} ${exactLookup(limited[1]) || limited[1]}`;
       }
       translatedValue = translatedValue.replace(/最大/g, "Max").replace(/メートル/g, "metres");
       return { text: `${fixed.get(key)}: ${translatedValue}`.trimEnd(), converted: true, kind: "property" };
@@ -451,6 +466,17 @@ function convert(text) {
     const results = [];
     const explicitlyIgnored = [];
     for (let i = 0; i < lines.length; i++) {
+      if (/^\(/.test(lines[i])) {
+        let reminderEnd = i;
+        while (reminderEnd < lines.length && !/\)$/.test(lines[reminderEnd])) reminderEnd++;
+        if (reminderEnd < lines.length) {
+          for (let ignoredIndex = i; ignoredIndex <= reminderEnd; ignoredIndex++) {
+            explicitlyIgnored.push({ source: lines[ignoredIndex], kind: "tail" });
+          }
+          i = reminderEnd;
+          continue;
+        }
+      }
       let matched = false;
       for (const [jp, en] of multilineExact) {
         const lineCount = jp.split("\n").length;
