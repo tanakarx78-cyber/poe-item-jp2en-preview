@@ -1,7 +1,7 @@
 let dictionary;
 
-const APP_VERSION = "v0.2.8";
-const APP_UPDATED = "2026-09-01 22:48 JST";
+const APP_VERSION = "v0.2.10";
+const APP_UPDATED = "2026-09-02 06:55 JST";
 const ISSUE_REPOSITORY = "tanakarx78-cyber/poe-item-jp2en-preview";
 
 const $ = id => document.getElementById(id);
@@ -23,7 +23,9 @@ const stateWords = new Map([
   ["レディーマーアイテム", "Redeemer Item"], ["レデンプターアイテム", "Redeemer Item"],
   ["クルセイダーアイテム", "Crusader Item"], ["シアリング・エグザークのアイテム", "Searing Exarch Item"],
   ["イーター・オブ・ワールズのアイテム", "Eater of Worlds Item"],
-  ["フラクチャーアイテム", "Fractured Item"], ["合成アイテム", "Synthesised Item"]
+  ["フラクチャーアイテム", "Fractured Item"], ["合成アイテム", "Synthesised Item"],
+  ["シンセサイズアイテム", "Synthesised Item"], ["シンセシスアイテム", "Synthesised Item"],
+  ["合成されたアイテム", "Synthesised Item"]
 ]);
 const manualExact = new Map([
   // The client uses 確率 in this unique-mod line while the trade data uses 率.
@@ -118,14 +120,24 @@ function applyTemplate(template, match) {
 }
 
 function exactLookup(value) {
-  return dictionary?.exact?.[value]
+  return dictionary?.keystoneNames?.[value]
+    || dictionary?.exact?.[value]
     || dictionary?.exact?.[value.replace(/\(/g, "（").replace(/\)/g, "）")];
 }
 
-function translateByRule(text) {
+function ruleInputVariants(text) {
   const variants = [text];
-  const advancedRoll = text.match(/^([^()\d]+)\([^)]*[ぁ-んァ-ヶ一-龯][^)]*\)(の.+)$/);
-  if (advancedRoll) variants.push(advancedRoll[1] + advancedRoll[2]);
+  const withoutDisplayAlias = text.replace(/^([^()\d]+)\([^)]*[ぁ-んァ-ヶ一-龯][^)]*\)(?=(?:と)?の)/, "$1");
+  if (withoutDisplayAlias !== text) variants.unshift(withoutDisplayAlias);
+  for (const variant of [...variants]) {
+    const conquered = variant.replace(/(範囲内のパッシブ(?:スキル)?は[^\n]+に)支配される/g, "$1征服される");
+    if (conquered !== variant) variants.unshift(conquered);
+  }
+  return [...new Set(variants)];
+}
+
+function translateByRule(text) {
+  const variants = ruleInputVariants(text);
   if (/(?:により|によって|に)サポートされる$/.test(text)) {
     const withoutDisplayAlias = text.replace(/([ぁ-んァ-ヶ一-龯々ー]+)\([^()]*-[^()]*\)(?=(?:により|によって|に)サポートされる)/g, "$1");
     if (withoutDisplayAlias !== text) variants.unshift(withoutDisplayAlias);
@@ -305,16 +317,23 @@ function isKnownFlavourBlock(lines) {
 }
 
 function prefixedItemName(value) {
-  for (const [jp, en] of Object.entries(dictionary.namePrefixes || {})) {
+  const prefixes = Object.entries(dictionary.namePrefixes || {})
+    .sort(([left], [right]) => right.length - left.length);
+  for (const [jp, en] of prefixes) {
     if (!value.startsWith(jp)) continue;
     const suffix = value.slice(jp.length);
-    if (!/^[\s・]/.test(suffix)) continue;
+    const separated = /^[\s・]/.test(suffix);
+    const compactSynthesised = en === "Synthesised" && Boolean(suffix) && !/^[\s・]/.test(suffix);
+    if (!separated && !compactSynthesised) continue;
     const name = exactLookup(suffix.replace(/^[\s・]+/, ""));
     if (name) return `${en} ${name}`;
   }
 }
 
 function baseNameFromDisplayName(value) {
+  // Keep a synthesised base intact; stripping it to the ordinary base would
+  // lose the marker that PoB uses to identify the special item base.
+  if (prefixedItemName(value)) return value;
   let found = "";
   for (const base of Object.keys(dictionary.baseNames || {})) {
     if (value.endsWith(base) && base.length > found.length) found = base;
@@ -522,7 +541,8 @@ function convert(text) {
     const rarityIndex = lines.findIndex(line => /^レアリティ:\s*(?:ノーマル|マジック|レア)$/.test(line.replace("：", ":")));
     const rarity = rarityIndex >= 0 && lines[rarityIndex].replace("：", ":").split(":")[1].trim();
     if (rarity === "レア") {
-      const baseIndex = lines.findIndex((line, index) => index > rarityIndex + 1 && dictionary.exact[line]);
+      const baseIndex = lines.findIndex((line, index) => index > rarityIndex + 1
+        && (dictionary.exact[line] || prefixedItemName(line)));
       if (baseIndex > rarityIndex + 1) lines[rarityIndex + 1] = "Rare Item";
     } else if ((rarity === "ノーマル" || rarity === "マジック") && lines[rarityIndex + 1]) {
       const base = baseNameFromDisplayName(lines[rarityIndex + 1]);
@@ -561,7 +581,8 @@ function convert(text) {
       if (matched) continue;
       for (const rule of multilineRules) {
         const lineCount = (rule.regex.source.match(/\\n/g) || []).length + 1;
-        const match = rule.regex.exec(lines.slice(i, i + lineCount).join("\n"));
+        const candidates = ruleInputVariants(lines.slice(i, i + lineCount).join("\n"));
+        const match = candidates.map(candidate => rule.regex.exec(candidate)).find(Boolean);
         if (!match) continue;
         results.push({ text: applyTemplate(rule.en, match), converted: true });
         i += lineCount - 1;
