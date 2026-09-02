@@ -1,7 +1,7 @@
 let dictionary;
 
-const APP_VERSION = "v0.2.11";
-const APP_UPDATED = "2026-09-02 10:57 JST";
+const APP_VERSION = "v0.2.12";
+const APP_UPDATED = "2026-09-02 11:13 JST";
 const ISSUE_REPOSITORY = "tanakarx78-cyber/poe-item-jp2en-preview";
 
 const $ = id => document.getElementById(id);
@@ -361,6 +361,9 @@ function convertLine(line, options = {}) {
     .replace(/\s*[-—]\s*(?:プレフィックス|サフィックス|スケールできない値)\s*$/, "");
 
   if (options.isMercenaryWarrant) {
+    if (/^(?:このアイテムを右クリックして傭兵の詳細を見る|マップデバイスでマップと共に使用して以前戦った傭兵をエリアに再出現させ、?再戦できる)[。.]*$/.test(clean)) {
+      return { text: "", converted: true, omitted: true, ignored: true, kind: "tail", source: original };
+    }
     const support = clean.match(/^(.+?)\s*\(ティア:\s*(\d+)\)$/);
     if (support) {
       const name = dictionary.mercenarySupports?.[support[1]] || exactLookup(support[1]);
