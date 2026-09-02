@@ -1,8 +1,8 @@
 let dictionary;
 
-const APP_VERSION = "v0.2.12";
-const APP_UPDATED = "2026-09-02 11:13 JST";
-const ISSUE_REPOSITORY = "tanakarx78-cyber/poe-item-jp2en-preview";
+const APP_VERSION = "v0.2.13";
+const APP_UPDATED = "2026-09-02 12:05 JST";
+const FEEDBACK_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd_Wf7xyJxhqLbTyvIlucRngoe0-Gw0RbG01AKqnJd3Vz259g/viewform";
 
 const $ = id => document.getElementById(id);
 const separator = "--------";
@@ -676,7 +676,7 @@ function sanitizeReportSource(source) {
     .join("\n");
 }
 
-function buildIssueBody(result, source, userAgent = "") {
+function buildFeedbackBody(result, source, userAgent = "") {
   return [
     "## 環境",
     `- Version: ${APP_VERSION}`,
@@ -701,14 +701,6 @@ function buildIssueBody(result, source, userAgent = "") {
     "## 補足",
     "ここへ症状やPoBでの表示結果を追記してください。"
   ].filter(line => line !== "").join("\n");
-}
-
-function buildIssueUrl(result, body) {
-  const itemClass = result.output.match(/^Item Class:\s*(.+)$/m)?.[1] || "Unknown item";
-  const url = new URL(`https://github.com/${ISSUE_REPOSITORY}/issues/new`);
-  url.searchParams.set("title", `[未変換] ${itemClass} / ${result.criticalUnknown.length}行`);
-  url.searchParams.set("body", body);
-  return url.toString();
 }
 
 async function copyField(field, successMessage) {
@@ -764,7 +756,7 @@ if (typeof document !== "undefined") {
     if ($("report-panel")) $("report-panel").hidden = false;
     $("copy").disabled = !result.output;
     if ($("copy-report")) $("copy-report").disabled = false;
-    if ($("github-report")) $("github-report").disabled = !result.criticalUnknown.length;
+    if ($("feedback-report")) $("feedback-report").disabled = !result.criticalUnknown.length;
     $("summary").className = `summary${result.criticalUnknown.length ? " warning" : ""}`;
     if (result.criticalUnknown.length) {
       const preview = result.criticalUnknown.slice(0, 4).map(item => `[${item.category}] ${item.line}`).join(" / ");
@@ -783,30 +775,19 @@ if (typeof document !== "undefined") {
     if (!report.value) return;
     await copyField(report, "未変換レポートをコピーしました");
   });
-  $("github-report")?.addEventListener("click", () => {
+  $("feedback-report")?.addEventListener("click", async () => {
     if (!lastResult?.criticalUnknown.length) return;
-    $("issue-report").value = buildIssueBody(lastResult, $("input").value, navigator.userAgent);
-    $("issue-dialog").showModal();
-  });
-  $("issue-cancel")?.addEventListener("click", () => $("issue-dialog").close());
-  $("issue-open")?.addEventListener("click", async () => {
-    const report = $("issue-report");
-    let body = report.value;
-    let url = buildIssueUrl(lastResult, body);
-    const issueTab = window.open("about:blank", "_blank");
-    if (!issueTab) {
+    const report = $("feedback-buffer");
+    report.value = buildFeedbackBody(lastResult, $("input").value, navigator.userAgent);
+    const formTab = window.open("about:blank", "_blank");
+    await copyField(report, "未変換レポートをコピーしました。Googleフォームの「報告内容」へ貼り付けてください");
+    if (!formTab) {
       $("summary").className = "summary warning";
-      $("summary").textContent = "GitHubを開けませんでした。ポップアップを許可してください";
+      $("summary").textContent = "レポートはコピーしましたが、Googleフォームを開けませんでした。ポップアップを許可してください";
       return;
     }
-    issueTab.opener = null;
-    if (url.length > 7000) {
-      await copyField(report, "長いレポートをコピーしました。GitHubの本文欄へ貼り付けてください");
-      body = "レポートが長いためクリップボードへコピーしました。この文章を消して貼り付けてください。";
-      url = buildIssueUrl(lastResult, body);
-    }
-    issueTab.location.href = url;
-    $("issue-dialog").close();
+    formTab.opener = null;
+    formTab.location.href = FEEDBACK_FORM_URL;
   });
   $("paste").addEventListener("click", async () => {
     try {
@@ -818,7 +799,7 @@ if (typeof document !== "undefined") {
       if ($("report-panel")) $("report-panel").hidden = true;
       $("copy").disabled = true;
       if ($("copy-report")) $("copy-report").disabled = true;
-      if ($("github-report")) $("github-report").disabled = true;
+      if ($("feedback-report")) $("feedback-report").disabled = true;
       $("summary").className = "summary";
       $("summary").textContent = "クリップボードから貼り付けました";
     } catch {
@@ -836,7 +817,7 @@ if (typeof document !== "undefined") {
     if ($("report-panel")) $("report-panel").hidden = true;
     $("copy").disabled = true;
     if ($("copy-report")) $("copy-report").disabled = true;
-    if ($("github-report")) $("github-report").disabled = true;
+    if ($("feedback-report")) $("feedback-report").disabled = true;
     $("summary").className = "summary";
     $("summary").textContent = "リセットしました";
     $("input").focus();
@@ -844,4 +825,4 @@ if (typeof document !== "undefined") {
   loadDictionary();
 }
 
-if (typeof module !== "undefined") module.exports = { convert, convertLine, formatReport, sanitizeReportSource, buildIssueBody, buildIssueUrl, normalize, setDictionary: value => { dictionary = value; } };
+if (typeof module !== "undefined") module.exports = { convert, convertLine, formatReport, sanitizeReportSource, buildFeedbackBody, normalize, setDictionary: value => { dictionary = value; } };

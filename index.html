@@ -21,12 +21,6 @@
     #reset { background:#777; color:#fff }
     #report-panel { margin-top:18px }
     #report-output { min-height:220px }
-    dialog { width:min(820px,calc(100% - 32px)); padding:20px; color:#eee; background:#202020; border:1px solid #666; border-radius:8px }
-    dialog::backdrop { background:#000a }
-    dialog h2 { margin-top:0; color:#d7bd88 }
-    dialog textarea { min-height:320px }
-    .dialog-actions { display:grid; grid-template-columns:1fr 2fr; gap:10px; margin-top:12px }
-    #issue-cancel { background:#777; color:#fff }
     button:disabled { opacity:.45; cursor:not-allowed }
     .warning { color:#ffbd66 }
     @media (max-width:760px) { .grid { grid-template-columns:1fr } .actions { grid-template-columns:1fr } textarea { min-height:340px } }
@@ -34,14 +28,14 @@
 </head>
 <body>
   <h1>PoE 日本語 → 英語 アイテム変換器&#65288;&#35430;&#20316;&#20844;&#38283;&#29256;&#65289;</h1>
-  <div class="version">試作公開版 v0.2.12 / 最終修正: 2026-09-02 11:13 JST</div>
+  <div class="version">試作公開版 v0.2.13 / 最終修正: 2026-09-02 12:05 JST</div>
   <div id="status" class="status">辞書を読み込んでいます…</div>
   <div class="actions" style="grid-template-columns:1fr 2fr 1.3fr 1.3fr 1fr">
     <button id="paste" type="button">貼り付け</button>
     <button id="convert" disabled>英語に変換</button>
     <button id="copy" disabled>変換結果をコピー</button>
     
-    <button id="github-report" disabled>未変換を報告</button>
+    <button id="feedback-report" disabled>未変換を報告</button>
     <button id="reset" type="button">リセット</button>
   </div>
   <div class="grid">
@@ -53,13 +47,8 @@
     <label for="report-output">未変換レポート</label>
     <textarea id="report-output" readonly spellcheck="false"></textarea>
   </section>
-  <dialog id="issue-dialog">
-    <h2>GitHubへ未変換を報告</h2>
-    <p>取引メモは除外済みです。内容を確認・編集してからGitHubを開いてください。この画面だけでは送信されません。</p>
-    <textarea id="issue-report" spellcheck="false" aria-label="送信する未変換レポート"></textarea>
-    <div class="dialog-actions"><button id="issue-cancel" type="button">キャンセル</button><button id="issue-open" type="button">GitHubでIssueを作成</button></div>
-  </dialog>
-  <script src="dictionary.js?v=20260902-12"></script>
-  <script src="app.js?v=20260902-12"></script>
+  <textarea id="feedback-buffer" class="copy-buffer" readonly aria-hidden="true"></textarea>
+  <script src="dictionary.js?v=20260902-13"></script>
+  <script src="app.js?v=20260902-13"></script>
 </body>
 </html>
