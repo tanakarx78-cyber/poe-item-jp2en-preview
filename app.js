@@ -1,7 +1,7 @@
 let dictionary;
 
-const APP_VERSION = "v0.2.10";
-const APP_UPDATED = "2026-09-02 06:55 JST";
+const APP_VERSION = "v0.2.11";
+const APP_UPDATED = "2026-09-02 10:57 JST";
 const ISSUE_REPOSITORY = "tanakarx78-cyber/poe-item-jp2en-preview";
 
 const $ = id => document.getElementById(id);
@@ -743,6 +743,15 @@ async function loadDictionary() {
 
 if (typeof document !== "undefined") {
   let lastResult;
+  const resizeInput = () => {
+    const input = $("input");
+    const { scrollX, scrollY } = window;
+    input.style.height = "auto";
+    input.style.height = `${input.scrollHeight}px`;
+    window.scrollTo(scrollX, scrollY);
+    requestAnimationFrame(() => window.scrollTo(scrollX, scrollY));
+  };
+  $("input").addEventListener("input", resizeInput);
   $("convert").addEventListener("click", () => {
     const result = convert($("input").value);
     lastResult = result;
@@ -799,6 +808,7 @@ if (typeof document !== "undefined") {
   $("paste").addEventListener("click", async () => {
     try {
       $("input").value = await navigator.clipboard.readText();
+      resizeInput();
       $("output").value = "";
       $("output-display").innerHTML = "";
       if ($("report-output")) $("report-output").value = "";
@@ -816,6 +826,7 @@ if (typeof document !== "undefined") {
   });
   $("reset").addEventListener("click", () => {
     $("input").value = "";
+    resizeInput();
     $("output").value = "";
     $("output-display").innerHTML = "";
     if ($("report-output")) $("report-output").value = "";

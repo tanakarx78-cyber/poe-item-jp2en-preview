@@ -10,13 +10,13 @@
     h1 { color:#c6a76b; margin-bottom:6px }
     .status,.summary,.version { color:#bbb; font-size:.9rem }
     .version { margin-bottom:6px }
-    .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:18px }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:12px }
     label { display:block; color:#d7bd88; font-weight:700; margin-bottom:7px }
     textarea { width:100%; min-height:480px; box-sizing:border-box; padding:12px; resize:vertical; background:#242424; color:#fff; border:1px solid #555; border-radius:6px; font:13px/1.5 ui-monospace,monospace }
     .output-display { width:100%; min-height:480px; box-sizing:border-box; overflow:auto; white-space:pre-wrap; word-break:break-word; padding:12px; background:#242424; color:#fff; border:1px solid #555; border-radius:6px; font:13px/1.5 ui-monospace,monospace }
     .output-display .unknown-required { color:#ff5c5c; }
     .copy-buffer { position:absolute; left:-9999px; width:1px; height:1px; }
-    .actions { display:grid; grid-template-columns:1fr 2fr 1.3fr 1.3fr 1fr; gap:10px; margin-top:16px }
+    .actions { display:grid; grid-template-columns:1fr 2fr 1.3fr 1.3fr 1fr; gap:10px; margin-top:18px }
     button { width:100%; padding:13px; border:0; border-radius:6px; background:#b99a5c; color:#111; font-weight:800; font-size:1rem; cursor:pointer }
     #reset { background:#777; color:#fff }
     #report-panel { margin-top:18px }
@@ -34,12 +34,8 @@
 </head>
 <body>
   <h1>PoE 日本語 → 英語 アイテム変換器&#65288;&#35430;&#20316;&#20844;&#38283;&#29256;&#65289;</h1>
-  <div class="version">試作公開版 v0.2.10 / 最終修正: 2026-09-02 06:55 JST</div>
+  <div class="version">試作公開版 v0.2.11 / 最終修正: 2026-09-02 10:57 JST</div>
   <div id="status" class="status">辞書を読み込んでいます…</div>
-  <div class="grid">
-    <section><label for="input">日本語アイテム</label><textarea id="input" spellcheck="false" placeholder="ゲーム内で Ctrl+C した内容を貼り付け"></textarea></section>
-    <section><label for="output-display">PoB用英語アイテム</label><div id="output-display" class="output-display" aria-live="polite"></div><textarea id="output" class="copy-buffer" readonly spellcheck="false"></textarea></section>
-  </div>
   <div class="actions" style="grid-template-columns:1fr 2fr 1.3fr 1.3fr 1fr">
     <button id="paste" type="button">貼り付け</button>
     <button id="convert" disabled>英語に変換</button>
@@ -47,6 +43,10 @@
     
     <button id="github-report" disabled>未変換を報告</button>
     <button id="reset" type="button">リセット</button>
+  </div>
+  <div class="grid">
+    <section><label for="input">日本語アイテム</label><textarea id="input" spellcheck="false" placeholder="ゲーム内で Ctrl+C した内容を貼り付け"></textarea></section>
+    <section><label for="output-display">PoB用英語アイテム</label><div id="output-display" class="output-display" aria-live="polite"></div><textarea id="output" class="copy-buffer" readonly spellcheck="false"></textarea></section>
   </div>
   <p id="summary" class="summary"></p>
   <section id="report-panel" hidden>
@@ -59,7 +59,7 @@
     <textarea id="issue-report" spellcheck="false" aria-label="送信する未変換レポート"></textarea>
     <div class="dialog-actions"><button id="issue-cancel" type="button">キャンセル</button><button id="issue-open" type="button">GitHubでIssueを作成</button></div>
   </dialog>
-  <script src="dictionary.js?v=20260902-10"></script>
-  <script src="app.js?v=20260902-10"></script>
+  <script src="dictionary.js?v=20260902-11"></script>
+  <script src="app.js?v=20260902-11"></script>
 </body>
 </html>
