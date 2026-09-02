@@ -17,6 +17,7 @@
     .output-display .unknown-required { color:#ff5c5c; }
     .copy-buffer { position:absolute; left:-9999px; width:1px; height:1px; }
     .actions { display:grid; grid-template-columns:1fr 2fr 1.3fr 1.3fr 1fr; gap:10px; margin-top:18px }
+    .report-hint { margin:7px 0 0; color:#bbb; font-size:.85rem; text-align:right }
     button { width:100%; padding:13px; border:0; border-radius:6px; background:#b99a5c; color:#111; font-weight:800; font-size:1rem; cursor:pointer }
     #reset { background:#777; color:#fff }
     #report-panel { margin-top:18px }
@@ -28,16 +29,17 @@
 </head>
 <body>
   <h1>PoE 日本語 → 英語 アイテム変換器&#65288;&#35430;&#20316;&#20844;&#38283;&#29256;&#65289;</h1>
-  <div class="version">試作公開版 v0.2.13 / 最終修正: 2026-09-02 12:05 JST</div>
+  <div class="version">試作公開版 v0.2.14 / 最終修正: 2026-09-02 12:21 JST</div>
   <div id="status" class="status">辞書を読み込んでいます…</div>
   <div class="actions" style="grid-template-columns:1fr 2fr 1.3fr 1.3fr 1fr">
     <button id="paste" type="button">貼り付け</button>
     <button id="convert" disabled>英語に変換</button>
     <button id="copy" disabled>変換結果をコピー</button>
     
-    <button id="feedback-report" disabled>未変換を報告</button>
+    <button id="feedback-report" disabled>レポートをコピーして報告</button>
     <button id="reset" type="button">リセット</button>
   </div>
+  <p class="report-hint">レポートをコピーしてGoogleフォームを開きます。フォームの「報告内容」欄へ貼り付けてください。</p>
   <div class="grid">
     <section><label for="input">日本語アイテム</label><textarea id="input" spellcheck="false" placeholder="ゲーム内で Ctrl+C した内容を貼り付け"></textarea></section>
     <section><label for="output-display">PoB用英語アイテム</label><div id="output-display" class="output-display" aria-live="polite"></div><textarea id="output" class="copy-buffer" readonly spellcheck="false"></textarea></section>
@@ -48,7 +50,7 @@
     <textarea id="report-output" readonly spellcheck="false"></textarea>
   </section>
   <textarea id="feedback-buffer" class="copy-buffer" readonly aria-hidden="true"></textarea>
-  <script src="dictionary.js?v=20260902-13"></script>
-  <script src="app.js?v=20260902-13"></script>
+  <script src="dictionary.js?v=20260902-14"></script>
+  <script src="app.js?v=20260902-14"></script>
 </body>
 </html>

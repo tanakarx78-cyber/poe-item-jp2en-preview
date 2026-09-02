@@ -1,7 +1,7 @@
 let dictionary;
 
-const APP_VERSION = "v0.2.13";
-const APP_UPDATED = "2026-09-02 12:05 JST";
+const APP_VERSION = "v0.2.14";
+const APP_UPDATED = "2026-09-02 12:21 JST";
 const FEEDBACK_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd_Wf7xyJxhqLbTyvIlucRngoe0-Gw0RbG01AKqnJd3Vz259g/viewform";
 
 const $ = id => document.getElementById(id);
@@ -696,10 +696,7 @@ function buildFeedbackBody(result, source, userAgent = "") {
     "## 英語変換結果",
     "```text",
     result.output,
-    "```",
-    "",
-    "## 補足",
-    "ここへ症状やPoBでの表示結果を追記してください。"
+    "```"
   ].filter(line => line !== "").join("\n");
 }
 
