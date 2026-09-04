@@ -1,7 +1,7 @@
 let dictionary;
 
-const APP_VERSION = "v0.2.16";
-const APP_UPDATED = "2026-09-02 12:56 JST";
+const APP_VERSION = "v0.2.17";
+const APP_UPDATED = "2026-09-05 JST";
 const FEEDBACK_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd_Wf7xyJxhqLbTyvIlucRngoe0-Gw0RbG01AKqnJd3Vz259g/viewform";
 
 const $ = id => document.getElementById(id);
